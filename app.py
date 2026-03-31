@@ -9,6 +9,15 @@ _PAWPAL_DOMAIN_CLASSES = (Owner, Pet, Task, Scheduler)
 _PRIORITY_TO_SCORE = {"low": 1, "medium": 2, "high": 3}
 
 
+def _format_due_value(task_obj: Task) -> str:
+    """Format optional task due datetime for table display."""
+    return (
+        task_obj.due_by.strftime("%Y-%m-%d %H:%M")
+        if task_obj.due_by is not None
+        else "No due time"
+    )
+
+
 def _ensure_session_objects() -> None:
     """Initialize long-lived domain objects in session state once per user session."""
     if "owner" not in st.session_state:
@@ -179,6 +188,61 @@ if pet.tasks:
 else:
     st.info("No tasks yet. Add one above.")
 
+st.markdown("### Task Insights")
+st.caption("Preview filtered and sorted tasks using Scheduler.filter_tasks() and Scheduler.sort_tasks_by_time().")
+
+task_scope = st.radio(
+    "Task scope",
+    ["Active pet", "All pets"],
+    horizontal=True,
+)
+
+status_filter = st.selectbox(
+    "Filter by status",
+    ["all", "pending", "completed"],
+    index=1,
+)
+
+all_owner_tasks = [task for owner_pet in owner.pets for task in owner_pet.tasks]
+preview_tasks = pet.tasks if task_scope == "Active pet" else all_owner_tasks
+completion_status = None if status_filter == "all" else status_filter
+pet_filter_name = pet.name if task_scope == "Active pet" else None
+
+filtered_preview_tasks = st.session_state.scheduler.filter_tasks(
+    preview_tasks,
+    owner=owner,
+    completion_status=completion_status,
+    pet_name=pet_filter_name,
+)
+
+pet_by_id = {owner_pet.pet_id: owner_pet for owner_pet in owner.pets}
+sorted_preview_tasks = st.session_state.scheduler.sort_tasks_by_time(
+    filtered_preview_tasks,
+    owner=owner,
+    pet_by_id=pet_by_id,
+)
+
+if sorted_preview_tasks:
+    st.success(
+        f"Showing {len(sorted_preview_tasks)} task(s) after filter + sort "
+        f"from {len(preview_tasks)} in scope."
+    )
+    st.table(
+        [
+            {
+                "pet": pet_by_id.get(task.pet_id, pet).name if task.pet_id is not None else "Unknown",
+                "task": task.title,
+                "status": task.status,
+                "priority": task.priority,
+                "duration_min": task.duration_min,
+                "due_by": _format_due_value(task),
+            }
+            for task in sorted_preview_tasks
+        ]
+    )
+else:
+    st.warning("No tasks match the selected filters.")
+
 st.divider()
 
 st.subheader("Build Schedule")
@@ -196,7 +260,37 @@ if st.button("Generate schedule"):
 if st.session_state.last_plan is not None:
     plan = st.session_state.last_plan
     st.success(plan.summary())
+    if plan.items:
+        st.markdown("### Planned Schedule")
+        st.table(
+            [
+                {
+                    "pet": item.pet_name,
+                    "task": item.task.title,
+                    "time": (
+                        f"{item.start_minute_of_day // 60:02d}:{item.start_minute_of_day % 60:02d}"
+                        f"-{item.end_minute_of_day // 60:02d}:{item.end_minute_of_day % 60:02d}"
+                    ),
+                    "duration_min": item.task.duration_min,
+                    "priority": item.task.priority,
+                }
+                for item in plan.items
+            ]
+        )
+
+        conflict_warnings = st.session_state.scheduler.detect_schedule_conflicts(plan.items)
+        if conflict_warnings:
+            for warning in conflict_warnings:
+                st.warning(warning)
+        else:
+            st.success("No schedule conflicts detected for this plan.")
+
+    if plan.skipped_tasks:
+        st.warning(
+            f"Skipped {len(plan.skipped_tasks)} task(s) because they did not fit remaining time/windows."
+        )
     if plan.explanations:
         st.markdown("### Plan Details")
         for explanation in plan.explanations:
-            st.write(f"- {explanation}")
+            if not explanation.startswith("Warning:"):
+                st.write(f"- {explanation}")

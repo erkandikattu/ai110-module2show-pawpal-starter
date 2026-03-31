@@ -22,6 +22,18 @@ Your final app should:
 - Display the plan clearly (and ideally explain the reasoning)
 - Include tests for the most important scheduling behaviors
 
+## Features
+
+- Multi-pet planning: generates a single owner-level daily plan across all pets, with optional single-pet planning.
+- Constraint filtering: filters tasks using owner constraints such as max task duration, preferred time windows, and task enabled state.
+- Time-aware sorting: sorts tasks by earliest due time first, then uses a deterministic tie-break with computed task score and task ID.
+- Priority scoring: ranks urgency using priority, required status, due-time proximity, owner category preferences/weights, and pet special-needs context.
+- Greedy time allocation: schedules tasks in order while time remains, with optional preferred-window placement and skip-on-mismatch behavior.
+- Flexible filtering: supports filtering tasks by completion status and pet name before planning.
+- Recurrence rollover: completing daily/weekly tasks automatically creates the next occurrence with a new due date.
+- Conflict warnings: detects overlapping planned items (same-pet and cross-pet) and reports warnings instead of crashing.
+- Explainable plans: generates per-task explanations for why tasks were scheduled or skipped.
+
 ## Smarter Scheduling
 
 Recent scheduling upgrades make plans more practical and explainable:
@@ -67,3 +79,5 @@ pip install -r requirements.txt
 5. Add tests to verify key behaviors.
 6. Connect your logic to the Streamlit UI in `app.py`.
 7. Refine UML so it matches what you actually built.
+
+![PawPal App Demo](pawpal_app_demo.png)
