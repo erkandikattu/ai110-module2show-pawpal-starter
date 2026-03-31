@@ -7,7 +7,7 @@ logic can be implemented incrementally.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from typing import Any, Dict, List, Optional
 
 
@@ -55,9 +55,42 @@ class Task:
     pet_id: Optional[str] = None
     status: str = "pending"
 
-    def mark_complete(self) -> None:
-        """Mark this task as completed."""
+    def mark_complete(self, pet: Optional[Pet] = None) -> Optional[Task]:
+        """Mark this task as completed and spawn next recurring occurrence when applicable."""
+        if self.status.strip().lower() == "completed":
+            return None
+
         self.status = "completed"
+        next_task = self._create_next_occurrence()
+        if next_task is not None and pet is not None:
+            pet.add_task(next_task)
+        return next_task
+
+    def _create_next_occurrence(self) -> Optional[Task]:
+        """Create the next task instance for recurring daily/weekly tasks."""
+        recurrence = (self.recurrence or "").strip().lower()
+        if recurrence not in {"daily", "weekly"}:
+            return None
+
+        reference_due = self.due_by or datetime.now()
+        delta = timedelta(days=1) if recurrence == "daily" else timedelta(days=7)
+        next_due_by = reference_due + delta
+        next_task_id = f"{self.task_id}-next-{next_due_by.strftime('%Y%m%d%H%M')}"
+
+        return Task(
+            task_id=next_task_id,
+            title=self.title,
+            category=self.category,
+            duration_min=self.duration_min,
+            priority=self.priority,
+            recurrence=self.recurrence,
+            required=self.required,
+            preferred_windows=list(self.preferred_windows),
+            due_by=next_due_by,
+            constraints=dict(self.constraints),
+            pet_id=self.pet_id,
+            status="pending",
+        )
 
     def is_due(self, on_date: date) -> bool:
         """Return whether this task is due on the provided date."""
@@ -237,11 +270,128 @@ class DailyPlan:
 class Scheduler:
     """Stateless scheduler API for building daily plans."""
 
+    @staticmethod
+    def _minute_to_hhmm(minute_of_day: int) -> str:
+        """Convert minute-of-day to HH:MM string."""
+        hour, minute = divmod(max(0, minute_of_day), 60)
+        return f"{hour:02d}:{minute:02d}"
+
+    def filter_tasks(
+        self,
+        tasks: List[Task],
+        owner: Optional[Owner] = None,
+        completion_status: Optional[str] = None,
+        pet_name: Optional[str] = None,
+    ) -> List[Task]:
+        """Filter tasks by completion status and/or pet name."""
+        status_filter = completion_status.strip().lower() if completion_status is not None else None
+        pet_name_filter = pet_name.strip().lower() if pet_name is not None else None
+
+        pet_name_by_id: Dict[str, str] = {}
+        if owner is not None:
+            pet_name_by_id = {pet.pet_id: pet.name.strip().lower() for pet in owner.pets}
+
+        filtered: List[Task] = []
+        for task in tasks:
+            if status_filter is not None and task.status.strip().lower() != status_filter:
+                continue
+
+            if pet_name_filter is not None:
+                task_pet_name = pet_name_by_id.get(task.pet_id or "", "")
+                if task_pet_name != pet_name_filter:
+                    continue
+
+            filtered.append(task)
+
+        return filtered
+
+    def sort_tasks_by_time(
+        self,
+        tasks: List[Task],
+        owner: Optional[Owner] = None,
+        pet_by_id: Optional[Dict[str, Pet]] = None,
+    ) -> List[Task]:
+        """Sort tasks by earliest due time, then by descending score when possible."""
+        default_pet: Optional[Pet] = None
+        if owner is not None and owner.pets:
+            default_pet = owner.pets[0]
+
+        def _task_score(task: Task) -> float:
+            if owner is None:
+                return float(task.priority)
+            task_pet = None
+            if pet_by_id is not None:
+                task_pet = pet_by_id.get(task.pet_id)
+            if task_pet is None:
+                task_pet = default_pet or Pet("unknown", "Unknown", "other", "adult")
+            return task.score(owner, task_pet)
+
+        return sorted(
+            tasks,
+            key=lambda task: (
+                task.due_by is None,
+                task.due_by.timestamp() if task.due_by is not None else float("inf"),
+                -_task_score(task),
+                task.task_id,
+            ),
+        )
+
+    def detect_schedule_conflicts(self, items: List[PlannedItem]) -> List[str]:
+        """Return non-fatal warnings for overlapping planned tasks."""
+        if len(items) < 2:
+            return []
+
+        ordered = sorted(
+            items,
+            key=lambda item: (
+                item.start_minute_of_day,
+                item.end_minute_of_day,
+                item.task.task_id,
+            ),
+        )
+
+        warnings: List[str] = []
+        seen_messages: set[str] = set()
+        active: List[PlannedItem] = []
+
+        for current in ordered:
+            # Drop items that end at or before the current start.
+            active = [
+                prior
+                for prior in active
+                if prior.end_minute_of_day > current.start_minute_of_day
+            ]
+
+            for prior in active:
+                overlap_start = max(prior.start_minute_of_day, current.start_minute_of_day)
+                overlap_end = min(prior.end_minute_of_day, current.end_minute_of_day)
+                if overlap_start >= overlap_end:
+                    continue
+
+                conflict_scope = "same pet" if prior.pet_id == current.pet_id else "cross-pet"
+                overlap_range = (
+                    f"{self._minute_to_hhmm(overlap_start)}-"
+                    f"{self._minute_to_hhmm(overlap_end)}"
+                )
+                message = (
+                    f"Warning: {conflict_scope} schedule conflict between "
+                    f"'{prior.task.title}' ({prior.pet_name or prior.pet_id}) and "
+                    f"'{current.task.title}' ({current.pet_name or current.pet_id}) at "
+                    f"{overlap_range}."
+                )
+                if message not in seen_messages:
+                    seen_messages.add(message)
+                    warnings.append(message)
+
+            active.append(current)
+
+        return warnings
+
     def generate_daily_plan(self, owner: Owner, pet: Pet, plan_date: date) -> DailyPlan:
         """Build a plan for a single pet while keeping owner context."""
         due_tasks = pet.get_due_tasks(plan_date)
         filtered = self.filter_by_constraints(due_tasks, owner)
-        ranked = self.rank_tasks(filtered, owner, pet)
+        ranked = self.sort_tasks_by_time(filtered, owner=owner, pet_by_id={pet.pet_id: pet})
         items = self.allocate_time(ranked, owner.daily_time_available_min)
         for item in items:
             item.pet_id = pet.pet_id
@@ -257,6 +407,7 @@ class Scheduler:
             skipped_tasks=skipped,
         )
         plan.explanations = self.build_explanations(plan.items, plan.skipped_tasks)
+        plan.explanations.extend(self.detect_schedule_conflicts(plan.items))
         return plan
 
     def generate_owner_daily_plan(
@@ -278,15 +429,8 @@ class Scheduler:
 
         filtered = self.filter_by_constraints(all_tasks, owner)
 
-        # Rank globally, but compute score using each task's associated pet context.
-        ranked = sorted(
-            filtered,
-            key=lambda task: task.score(
-                owner,
-                owner_pet_by_id.get(task.pet_id) or (owner.pets[0] if owner.pets else Pet("unknown", "Unknown", "other", "adult")),
-            ),
-            reverse=True,
-        )
+        # Prioritize earliest due tasks globally, then break ties by computed score.
+        ranked = self.sort_tasks_by_time(filtered, owner=owner, pet_by_id=owner_pet_by_id)
 
         items = self.allocate_time(ranked, owner.daily_time_available_min)
         for item in items:
@@ -308,6 +452,7 @@ class Scheduler:
             skipped_tasks=skipped,
         )
         plan.explanations = self.build_explanations(plan.items, plan.skipped_tasks)
+        plan.explanations.extend(self.detect_schedule_conflicts(plan.items))
         return plan
 
     def filter_by_constraints(self, tasks: List[Task], owner: Owner) -> List[Task]:

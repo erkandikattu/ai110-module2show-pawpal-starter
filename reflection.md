@@ -21,12 +21,16 @@ Previously, an owner could have many pets, but scheduling tasks was only availab
 **a. Constraints and priorities**
 
 - What constraints does your scheduler consider (for example: time, priority, preferences)?
+My scheduler considers time and preferences for initial task validation. Then, it considers priority, status, and due-time for ordering valid tasks.
 - How did you decide which constraints mattered most?
+I prioritized the constraints based on impact. I first prioritized constraints like time and preferences that helps to eliminate invalid tasks. Then, I prioritized constraints that help filter efficiently like status and due-time. Overall, I prioritized constraints for eliminating invalid tasks and filtering tasks effectively for schedule generation.
 
 **b. Tradeoffs**
 
 - Describe one tradeoff your scheduler makes.
+My scheduler uses a greedy approach and schedules high ranked tasks by due-time instead of finding the best overall schedule.
 - Why is that tradeoff reasonable for this scenario?
+It is reasonable because users and pet owners need fast daily plans that are simple. The perfect plan taks time to create and might be more complex.
 
 ---
 

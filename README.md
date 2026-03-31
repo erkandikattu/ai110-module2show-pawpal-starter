@@ -22,6 +22,16 @@ Your final app should:
 - Display the plan clearly (and ideally explain the reasoning)
 - Include tests for the most important scheduling behaviors
 
+## Smarter Scheduling
+
+Recent scheduling upgrades make plans more practical and explainable:
+
+- Time-aware sorting: tasks can be ordered by due time so earlier deadlines are handled first.
+- Flexible filtering: tasks can be filtered by completion status and by pet name.
+- Recurrence rollover: completing a daily or weekly task automatically creates the next occurrence.
+- Conflict warnings: overlapping planned tasks are detected and reported as warnings instead of crashing.
+- Better demos/tests: sample data now includes out-of-order tasks and overlap checks to verify behavior.
+
 ## Getting started
 
 ### Setup
