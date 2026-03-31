@@ -3,7 +3,7 @@
 ## 1. System Design
 
 **a. Initial design**
-
+Three core actions the user should be able to perform are adding a pet, scheduling pet tasks (e.g. walk, feeding, grooming, etc.), and see viable schedules based on constraints.
 - Briefly describe your initial UML design.
 - What classes did you include, and what responsibilities did you assign to each?
 
