@@ -5,13 +5,15 @@
 **a. Initial design**
 Three core actions the user should be able to perform are adding a pet, scheduling pet tasks (e.g. walk, feeding, grooming, etc.), and see viable schedules based on constraints.
 - Briefly describe your initial UML design.
+I chose classes for the 4 main components of Owner, Pet, Task, Scheduler. I also chose additional helper classes called DailyPlan and PlannedItem to help create schedules from tasks. Owner, Pet, and Task all work in the traditional sense.
 - What classes did you include, and what responsibilities did you assign to each?
+I included the 4 main classes and 2 helper classes called PlannedItem and DailyPlan. The PlannedItem class represents tasks with start and end times. The DailyPlan class represents the tasks planned for a specific date. The scheduler then uses DailyPlan and PlannedItem to generate schedules. Owner has preferences, pets, and availability. Pet has pet attributes and tasks. Task has duration, priority, and constraints. 
 
 **b. Design changes**
 
-- Did your design change during implementation?
+- Did your design change during implementation? Yes, some logic errors and missing relationships were identified.
 - If yes, describe at least one change and why you made it.
-
+Previously, an owner could have many pets, but scheduling tasks was only available for a single pet at a time. This is a logic error that was fixed by allowing the scheduler to schedule tasks for multiple pets. Also, planned tasks did not identify which pet the task is assigned to. This logic error was fixed by idnetfying which pet a task is assigned to as a parameter.
 ---
 
 ## 2. Scheduling Logic and Tradeoffs
