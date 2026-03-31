@@ -32,6 +32,22 @@ Recent scheduling upgrades make plans more practical and explainable:
 - Conflict warnings: overlapping planned tasks are detected and reported as warnings instead of crashing.
 - Better demos/tests: sample data now includes out-of-order tasks and overlap checks to verify behavior.
 
+## Testing PawPal+
+
+Run the automated test suite with:
+
+```bash
+python -m pytest
+```
+
+The tests focus on the most important scheduling behaviors:
+
+- Sorting correctness, including due-time ordering and deterministic tie-breaks.
+- Recurrence logic, including daily/weekly rollover and non-recurring/idempotent completion behavior.
+- Conflict detection, including overlap warnings for same-pet and cross-pet plans, plus boundary non-overlap cases.
+
+Current reliability confidence: **High**. All tests are passing, which gives strong confidence that core scheduling behavior is stable for expected and edge-case scenarios covered by the suite.
+
 ## Getting started
 
 ### Setup
